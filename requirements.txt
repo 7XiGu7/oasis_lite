@@ -1,0 +1,35 @@
+# Python 3.10 is the tested runtime for this lite repo.
+#
+# This file lists direct project dependencies pinned to versions validated in
+# the local .venv. Transitive dependencies are intentionally not frozen here so
+# pip can still resolve platform-specific builds, especially for torch/CUDA
+# packages. If your machine needs a special CPU/CUDA torch wheel, install the
+# matching torch build first and then install the remaining requirements.
+
+# Core agent/runtime framework
+camel-ai==0.2.90
+openai==2.38.0
+httpx==0.28.1
+pydantic==2.12.0
+python-dotenv==1.2.2
+tiktoken==0.12.0
+
+# Data loading and numeric utilities
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+
+# Memory, embeddings, and recommendation models
+chromadb==1.5.9
+sentence-transformers==5.5.1
+transformers==5.9.0
+torch==2.12.0
+tqdm==4.67.3
+
+# Plotting helpers used by analysis utilities
+matplotlib==3.10.9
+seaborn==0.13.2
+
+# Test runner
+pytest==9.0.3

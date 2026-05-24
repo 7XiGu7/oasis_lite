@@ -1,0 +1,23 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime outputs and local model/vector stores
+*.db
+*.sqlite
+*.sqlite3
+*.log
+chroma_db/
+models/
+checkpoints/
+outputs/
+logs/
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
