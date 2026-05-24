@@ -28,6 +28,9 @@ from checkpoint_utils import (
 
 load_dotenv(override=True)
 
+DEFAULT_OUTPUT_DIR = Path(os.getenv("OASIS_OUTPUT_DIR", "outputs"))
+DEFAULT_MODEL_DIR = Path(os.getenv("OASIS_MODEL_DIR", "models"))
+
 @contextmanager
 def timed_stage(name: str):
     start = time.perf_counter()
@@ -73,12 +76,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--memory-embedding-device", default="cuda")
     parser.add_argument(
         "--memory-embedding-model",
-        default="/data/lijiantong/LLM_model/bge-m3/",
+        default=os.getenv("EMBEDDING_MODEL", str(DEFAULT_MODEL_DIR / "bge-m3")),
     )
     parser.add_argument("--recsys-device", default="cpu")
     parser.add_argument(
         "--recsys-model",
-        default="/data/lijiantong/LLM_model/twhin-bert-base/",
+        default=os.getenv("RECSYS_MODEL", str(DEFAULT_MODEL_DIR / "twhin-bert-base")),
     )
     parser.add_argument("--agent-context-token-limit", type=int, default=6000)
     parser.add_argument("--agent-message-window-size", type=int, default=None)
@@ -132,16 +135,16 @@ async def main():
     is_camel_agent = args.agent_variant == "camel"
     profile_stem = Path(args.profile_path).stem
     run_variant = f"{args.variant}_{profile_stem}_{args.agent_variant}"
-    db_path = args.db_path or f"/data/lijiantong/Data/oasis/data/{run_variant}.db"
+    db_path = args.db_path or str(DEFAULT_OUTPUT_DIR / "data" / f"{run_variant}.db")
     chromadb_path = (
         None
         if is_camel_agent
         else args.chroma_path
-        or f"/data/lijiantong/Data/oasis/data/chroma_db/{run_variant}"
+        or str(DEFAULT_OUTPUT_DIR / "data" / "chroma_db" / run_variant)
     )
     checkpoint_dir = (
         args.checkpoint_dir
-        or f"/data/lijiantong/Saved/oasis/checkpoints/{run_variant}"
+        or str(DEFAULT_OUTPUT_DIR / "checkpoints" / run_variant)
     )
 
     os.environ["OASIS_DB_PATH"] = os.path.abspath(db_path)

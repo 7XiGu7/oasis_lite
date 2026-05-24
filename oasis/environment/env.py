@@ -34,7 +34,7 @@ from oasis.social_platform.typing import (ActionType, DefaultPlatformType,
                                           RecsysConfig, RecsysType)
 
 # Create log directory if it doesn't exist
-log_dir = "/data/lijiantong/Data/oasis/log"
+log_dir = os.getenv("OASIS_LOG_DIR", "outputs/logs")
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 

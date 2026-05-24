@@ -100,11 +100,11 @@ def test_recsys_config_resolves_adaptive_embedding_batch_size():
 def test_recsys_config_accepts_explicit_model_path():
     config = RecsysConfig.twitter(
         available_device="cuda:6",
-        model_name_or_path="/data/local/twhin",
+        model_name_or_path="models/twhin",
         embedding_batch_size=32,
     )
 
-    assert config.model_name_or_path == "/data/local/twhin"
+    assert config.model_name_or_path == "models/twhin"
     assert config.resolved_embedding_batch_size() == 32
 
 
@@ -145,14 +145,14 @@ def test_twhin_model_loading_uses_configured_model_path(monkeypatch):
     tokenizer, model = recsys.get_recsys_model(
         available_device="cuda:6",
         recsys_type="twhin-bert",
-        model_name_or_path="/data/local/twhin",
+        model_name_or_path="models/twhin",
     )
 
     assert tokenizer.kind == "tokenizer"
     assert model.device == "cuda:6"
     assert model.is_eval is True
-    assert calls["tokenizer"][0][0] == "/data/local/twhin"
-    assert calls["model"][0][0] == "/data/local/twhin"
+    assert calls["tokenizer"][0][0] == "models/twhin"
+    assert calls["model"][0][0] == "models/twhin"
 
 
 def test_rec_sys_personalized_twh_passes_batch_and_coarse_filter(monkeypatch):
@@ -203,7 +203,7 @@ def test_rec_sys_personalized_twh_passes_batch_and_coarse_filter(monkeypatch):
         max_rec_post_len=1,
         current_time=0,
         available_device="cpu",
-        model_name_or_path="/data/local/twhin",
+        model_name_or_path="models/twhin",
         embedding_batch_size=7,
         coarse_filter_size=11,
     )

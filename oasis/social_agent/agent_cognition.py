@@ -16,7 +16,7 @@ except ModuleNotFoundError:
 from oasis.social_agent.social_context_builder import SocialContextBuilder
 
 
-log_dir = "/data/lijiantong/Data/oasis/log/"
+log_dir = os.getenv("OASIS_LOG_DIR", "outputs/logs")
 now = datetime.now().strftime("%Y-%m-%d")
 AGENT_COGNITION_LOG_PATH = os.getenv(
     "OASIS_AGENT_COGNITION_RECORD_PATH",

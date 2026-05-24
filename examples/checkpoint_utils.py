@@ -20,7 +20,8 @@ from typing import Any
 
 SIMULATION_SCHEMA_VERSION = 1
 LLM_USAGE_LOG_ENV = "OASIS_LLM_USAGE_LOG_PATH"
-DEFAULT_LLM_USAGE_LOG_DIR = Path("/data/lijiantong/Data/oasis/log")
+DEFAULT_OUTPUT_DIR = Path(os.getenv("OASIS_OUTPUT_DIR", "outputs"))
+DEFAULT_LLM_USAGE_LOG_DIR = DEFAULT_OUTPUT_DIR / "logs"
 LOG_PATH_ENV_TEMPLATES = {
     "OASIS_ENV_LOG_PATH": "oasis-{variant}-{timestamp}.log",
     "OASIS_LLM_LOG_PATH": "oasis.llm-{variant}-{timestamp}.log",

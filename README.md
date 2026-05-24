@@ -10,7 +10,8 @@ that can validate the environment without triggering agent LLM calls.
 Create a Python 3.10 environment and install the pinned direct dependencies:
 
 ```bash
-cd /data/lijiantong/oasis_lite/oasis-lite-runtime-20260522-105953
+git clone git@github.com:7XiGu7/oasis_lite.git
+cd oasis_lite
 python3.10 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
@@ -45,7 +46,7 @@ outputs.
 Run validation commands from the repository root:
 
 ```bash
-cd /data/lijiantong/oasis_lite/oasis-lite-runtime-20260522-105953
+cd oasis_lite
 ```
 
 There are three recommended validation runs:
@@ -164,7 +165,7 @@ Example small Twitter run:
 
 ```bash
 .venv/bin/python examples/twitter_simulation.py \
-  --profile-path /path/to/twitter_profiles.csv \
+  --profile-path profiles/twitter_profiles.csv \
   --steps 2 \
   --activation-prob 0.05 \
   --recsys-device cpu \
@@ -175,17 +176,16 @@ Example small Weibo run:
 
 ```bash
 .venv/bin/python examples/weibo_simulation.py \
-  --profile-path /path/to/weibo_profiles.csv \
+  --profile-path profiles/weibo_profiles.csv \
   --steps 2 \
   --activation-prob 0.05 \
   --recsys-device cpu \
   --fresh
 ```
 
-By default, simulation DBs and checkpoints are written under
-`/data/lijiantong/Data/oasis/data` and
-`/data/lijiantong/Saved/oasis/checkpoints`. You can override them with
-`--db-path`, `--checkpoint-dir`, and `--chroma-path`.
+By default, simulation DBs, Chroma data, checkpoints, and logs are written under
+`outputs/`. You can override them with `--db-path`, `--checkpoint-dir`,
+`--chroma-path`, and the `OASIS_*_LOG_PATH` environment variables.
 
 ## Inspecting Outputs
 

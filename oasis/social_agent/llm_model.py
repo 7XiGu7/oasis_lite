@@ -64,7 +64,7 @@ from dotenv import load_dotenv
 # 加载 .env 文件中的环境变量
 load_dotenv(override=True)
 
-_LOG_DIR = "/data/lijiantong/Data/oasis/log"
+_LOG_DIR = os.getenv("OASIS_LOG_DIR", "outputs/logs")
 os.makedirs(_LOG_DIR, exist_ok=True)
 llm_log = logging.getLogger("oasis.llm")
 llm_log.setLevel(logging.INFO)
@@ -199,7 +199,13 @@ class LLMModel:
             self.tokenizer = self._get_encoding()
 
     def _load_vllm_tokenizer(self):
-        tokenizer_path = Path(f"/data/lijiantong/LLM_model/{self.model_name}/")
+        tokenizer_root = Path(os.getenv("OASIS_MODEL_DIR", "models"))
+        tokenizer_path = Path(
+            os.getenv(
+                "VLLM_TOKENIZER_PATH",
+                str(tokenizer_root / self.model_name),
+            )
+        )
         if not tokenizer_path.is_dir():
             llm_log.warning(
                 "Tokenizer path %s not found; falling back to tiktoken.",

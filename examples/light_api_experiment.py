@@ -359,7 +359,7 @@ async def run_experiment(args: argparse.Namespace) -> None:
         embedding_model = (
             args.embedding_model
             or os.getenv("EMBEDDING_MODEL")
-            or "/data/lijiantong/Downloads/bge-m3_ms"
+            or "BAAI/bge-m3"
         )
         embedding_model_config = {
             "model_name_or_path": embedding_model,

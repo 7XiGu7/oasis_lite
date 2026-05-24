@@ -40,7 +40,7 @@ def test_restore_checkpoint_environment_restores_managed_log_paths(monkeypatch):
         monkeypatch.delenv(env_name, raising=False)
 
     environment = {
-        env_name: f"/tmp/{env_name}.log"
+        env_name: f"outputs/logs/{env_name}.log"
         for env_name in utils.LOG_PATH_ENV_NAMES
     }
 

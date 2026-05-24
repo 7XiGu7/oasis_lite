@@ -19,7 +19,7 @@ from datetime import datetime
 
 from oasis.social_platform.typing import ActionType
 
-log_dir = "/data/lijiantong/Data/oasis/log"
+log_dir = os.getenv("OASIS_LOG_DIR", "outputs/logs")
 now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 AGENT_ACTION_LOG_PATH = os.getenv(
     "OASIS_AGENT_ACTION_RECORD_PATH",
