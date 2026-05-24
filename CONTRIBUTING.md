@@ -26,11 +26,20 @@ Before opening a pull request, run:
 .venv/bin/python examples/light_smoke_test.py --steps 1 --skip-real-llm --work-dir outputs/light_smoke_no_api
 ```
 
+The no-API smoke run should print `smoke_mode=env_only` and
+`REAL_LLM_API_CALL_SKIPPED`.
+
 When changing API or LLM integration code, also run:
 
 ```bash
 .venv/bin/python examples/light_smoke_test.py --steps 1 --work-dir outputs/light_smoke_api
+.venv/bin/python examples/light_api_experiment.py --work-dir outputs/light_api_experiment --fresh
 ```
+
+The API smoke run should print `smoke_mode=env_plus_real_llm` and
+`REAL_LLM_API_CALL_OK`.
+The light API experiment should print `LIGHT_API_EXPERIMENT_OK` and
+`agent_llm_calls_performed=true`.
 
 ## Secrets And Outputs
 

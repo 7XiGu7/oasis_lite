@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import shutil
 import sys
@@ -16,6 +17,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv(override=True)
+
+EXPECTED_LLM_MARKER = "oasis-lite-ok"
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,6 +78,14 @@ def require_success(name: str, result: dict[str, Any]) -> dict[str, Any]:
     if not result.get("success"):
         raise RuntimeError(f"{name} failed: {result}")
     return result
+
+
+def write_json_report(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 async def exercise_platform_actions(platform) -> dict[str, Any]:
@@ -330,8 +341,20 @@ async def run_smoke(args: argparse.Namespace) -> None:
 
     await env.close()
 
+    smoke_mode = "env_only" if args.skip_real_llm else "env_plus_real_llm"
+    env_report = {
+        "status": "ok",
+        "activation_prob": args.activation_prob,
+        "agent_llm_calls_allowed": args.activation_prob > 0,
+        "db_path": str(db_path),
+        "created": created,
+        "counts": counts,
+        "trace_actions": trace_action_counts,
+    }
     print("ENV_SMOKE_TEST_OK")
+    print(f"smoke_mode={smoke_mode}")
     print(f"activation_prob={args.activation_prob}")
+    print(f"agent_llm_calls_allowed={str(args.activation_prob > 0).lower()}")
     print(f"work_dir={work_dir}")
     print(f"db_path={db_path}")
     print(
@@ -349,20 +372,63 @@ async def run_smoke(args: argparse.Namespace) -> None:
         )
     )
 
-    if not args.skip_real_llm:
-        await run_real_llm_smoke(args)
+    if args.skip_real_llm:
+        real_llm_report_path = work_dir / "real_llm_smoke_skipped.json"
+        real_llm_report = {
+            "status": "skipped",
+            "api_call_performed": False,
+            "reason": "--skip-real-llm was provided",
+        }
+        write_json_report(real_llm_report_path, real_llm_report)
+        print("REAL_LLM_SMOKE_TEST_SKIPPED")
+        print("REAL_LLM_API_CALL_SKIPPED")
+        print("real_llm_smoke_status=skipped")
+        print("api_call_performed=false")
+        print(f"real_llm_report_path={real_llm_report_path}")
+    else:
+        real_llm_report_path = work_dir / "real_llm_smoke.json"
+        real_llm_report = await run_real_llm_smoke(args, real_llm_report_path)
         print("REAL_LLM_SMOKE_TEST_OK")
+        print("REAL_LLM_API_CALL_OK")
+        print("real_llm_smoke_status=ok")
+        print("api_call_performed=true")
+        print(f"real_llm_report_path={real_llm_report_path}")
+        print(
+            "real_llm_report="
+            + ", ".join(
+                f"{key}:{value}" for key, value in real_llm_report.items()
+            )
+        )
+
+    summary_path = work_dir / "smoke_summary.json"
+    write_json_report(
+        summary_path,
+        {
+            "status": "ok",
+            "mode": smoke_mode,
+            "api_call_performed": real_llm_report["api_call_performed"],
+            "work_dir": str(work_dir),
+            "environment": env_report,
+            "real_llm": real_llm_report,
+        },
+    )
+    print(f"summary_path={summary_path}")
 
     if args.work_dir is None and not args.keep:
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-async def run_real_llm_smoke(args: argparse.Namespace) -> None:
+async def run_real_llm_smoke(
+    args: argparse.Namespace,
+    report_path: Path,
+) -> dict[str, Any]:
     from oasis.social_agent.llm_model import LLMModel
 
     backend = args.llm_backend
     model_name = args.llm_model
     base_url = args.llm_base_url
+    operation_name = "light_smoke_real_llm"
+    usage_log_path = report_path.with_name("real_llm_usage_summary.json")
     if backend == "dashscope":
         model_name = model_name or os.getenv("DASHSCOPE_MODEL_NAME", "qwen-plus")
         base_url = base_url or os.getenv(
@@ -380,7 +446,7 @@ async def run_real_llm_smoke(args: argparse.Namespace) -> None:
         temperature=0.0,
         top_p=1.0,
         enable_thinking=False,
-        usage_log_path=None,
+        usage_log_path=usage_log_path,
         timeout=args.llm_timeout,
     )
     llm.retry_attempts = 1
@@ -388,19 +454,51 @@ async def run_real_llm_smoke(args: argparse.Namespace) -> None:
         [
             {
                 "role": "user",
-                "content": "Reply with exactly: oasis-lite-ok",
+                "content": f"Reply with exactly: {EXPECTED_LLM_MARKER}",
             }
         ],
         enable_thinking=False,
-        operation_name="light_smoke_real_llm",
+        operation_name=operation_name,
     )
     content = (parts.content or "").strip()
     if not content:
         raise RuntimeError("Real LLM call returned empty content")
+    marker_matched = EXPECTED_LLM_MARKER in content.lower()
+    if not marker_matched:
+        raise RuntimeError(
+            "Real LLM call returned content but did not include the expected "
+            f"marker {EXPECTED_LLM_MARKER!r}: {content!r}"
+        )
+    usage_summary = llm.get_token_usage_summary()
+    request_count = usage_summary["requests"]
+    if request_count < 1:
+        raise RuntimeError("Real LLM call completed but usage request count is 0")
+    payload = {
+        "status": "ok",
+        "api_call_performed": True,
+        "operation": operation_name,
+        "backend": llm.backend,
+        "model": llm.model_name,
+        "base_url": llm.base_url,
+        "is_vllm": llm.is_vllm,
+        "expected_marker": EXPECTED_LLM_MARKER,
+        "response_contains_expected_marker": marker_matched,
+        "response": content,
+        "request_count": request_count,
+        "usage_log_path": str(usage_log_path),
+        "usage_summary": usage_summary,
+    }
+    write_json_report(report_path, payload)
     print(f"llm_backend={llm.backend}")
     print(f"llm_model={llm.model_name}")
     print(f"llm_base_url={llm.base_url}")
+    print(f"llm_is_vllm={str(llm.is_vllm).lower()}")
+    print(f"llm_expected_marker={EXPECTED_LLM_MARKER}")
+    print(f"llm_marker_matched={str(marker_matched).lower()}")
+    print(f"llm_request_count={request_count}")
+    print(f"llm_usage_log_path={usage_log_path}")
     print(f"llm_response={content[:200]}")
+    return payload
 
 
 def main() -> None:
