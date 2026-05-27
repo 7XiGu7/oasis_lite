@@ -133,6 +133,21 @@ class SocialAgent(ChatAgent):
             f"{self._action_display_name(action_name)}; "
             f"params: {self._summarize_action_args(args, kwargs)}")
 
+    @staticmethod
+    def _tool_call_args(tool_call: Any) -> Any:
+        if isinstance(tool_call, dict):
+            return tool_call.get("args")
+        return getattr(tool_call, "args", None)
+
+    @staticmethod
+    def _tool_call_name(tool_call: Any) -> str:
+        if isinstance(tool_call, dict):
+            return str(tool_call.get("tool_name") or tool_call.get("name") or "")
+        return str(
+            getattr(tool_call, "tool_name", None)
+            or getattr(tool_call, "name", None)
+            or "")
+
     def __init__(self,
                  agent_id: int,
                  user_info: UserInfo,
@@ -260,14 +275,21 @@ class SocialAgent(ChatAgent):
             content=user_content)
         try:
             response = await self.astep(user_msg)
-            for tool_call in response.info['tool_calls']:
-                action_name = tool_call.tool_name
-                args = tool_call.args
+            response_info = getattr(response, "info", {}) or {}
+            tool_calls = (
+                response_info.get("tool_calls")
+                if isinstance(response_info, dict)
+                else None
+            ) or []
+            if not tool_calls:
+                return {
+                    "success": False,
+                    "error": "LLM response did not include a tool call.",
+                }
+            for tool_call in tool_calls:
+                action_name = self._tool_call_name(tool_call)
+                args = self._tool_call_args(tool_call)
                 self._log_action_summary(action_name, args=args)
-
-                # Abort graph action for if 100w Agent
-                # self.perform_agent_graph_action(action_name, args)
-
                 return response
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")

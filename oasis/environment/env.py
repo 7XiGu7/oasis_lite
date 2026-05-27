@@ -372,7 +372,7 @@ class OasisEnv:
         self, actions: dict[Any, Union[ManualAction, LLMAction,
                                                List[Union[ManualAction,
                                                           LLMAction]]]]
-    ) -> None:
+    ) -> list[Any]:
         r"""Update the recommendation system and perform the actions.
 
         Args:
@@ -381,7 +381,7 @@ class OasisEnv:
                 perform, including the manual(pre-defined) actions and llm
                 actions.
         Returns:
-            None
+            Per-action task results.
         """
 
         # Update the recommendation system
@@ -427,19 +427,20 @@ class OasisEnv:
                     tasks.append(self._perform_llm_action(agent))
 
         # Execute all tasks concurrently.
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
         env_log.info("performed all actions.")
 
 
         # Update the clock
         if self.platform_type in (DefaultPlatformType.TWITTER, DefaultPlatformType.WEIBO):
             self.platform.sandbox_clock.time_step += 1
+        return results
 
     async def step_V2(
         self, actions: dict[Any, Union[ManualAction, LLMAction,
                                                List[Union[ManualAction,
                                                           LLMAction]]]]
-    ) -> None:
+    ) -> list[Any]:
         r"""Update the recommendation system and perform the actions.
 
         Args:
@@ -448,7 +449,7 @@ class OasisEnv:
                 perform, including the manual(pre-defined) actions and llm
                 actions.
         Returns:
-            None
+            Per-action task results.
         """
 
         # Update the recommendation system
@@ -467,20 +468,27 @@ class OasisEnv:
                 tasks.append(self._perform_llm_action(agent))
 
         # Execute all tasks concurrently.
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
         env_log.info("performed all actions.")
 
 
         # Update the clock
         if self.platform_type in (DefaultPlatformType.TWITTER, DefaultPlatformType.WEIBO):
             self.platform.sandbox_clock.time_step += 1
+        return results
 
     async def close(self) -> None:
         r"""Stop the platform and close the environment.
         """
+        platform_task = getattr(self, "platform_task", None)
+        if platform_task is None:
+            return
+        if platform_task.done():
+            await platform_task
+            return
         await self.channel.write_to_receive_queue(
             (None, None, ActionType.EXIT))
-        await self.platform_task
+        await platform_task
         env_log.info("Simulation finished! Please check the results in the "
                      f"database: {self.platform.db_path}. Note that the trace "
                      "table stored all the actions of the agents.")

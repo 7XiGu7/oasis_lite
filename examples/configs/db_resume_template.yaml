@@ -1,0 +1,80 @@
+task:
+  name: db_resume_template
+  topic: "Replace this with the simulation topic."
+  description: "Template for resuming an OASIS simulation from an initialized DB."
+
+paths:
+  input_db: inputs/twitter_simulation1000_TikTok.db
+  output_dir: outputs/db_resume/db_resume_template
+  output_db: outputs/db_resume/db_resume_template/two_step_run.db
+  overwrite_output: true
+
+execution:
+  mode: run
+  load_dotenv: true
+  stop_on_validation_error: true
+
+model:
+  platform: qwen
+  type: qwen-plus
+  url: null
+  api_key_env: QWEN_API_KEY
+  fallback_api_key_env: DASHSCOPE_API_KEY
+  config: {}
+
+platform:
+  type: twitter
+  kwargs:
+    recsys_type: random
+    refresh_rec_post_count: 20
+    max_rec_post_len: 20
+    following_post_count: 30
+    max_search_post_count: 30
+    max_search_user_count: 30
+    use_openai_embedding: false
+    time_top_n_comments: 30
+
+agents:
+  recsys_type: twitter
+  available_actions:
+    - create_post
+    - like_post
+    - repost
+    - follow
+    - do_nothing
+    - quote_post
+    - create_comment
+    - like_comment
+  default_profile:
+    traits:
+      openness: 0.5
+    traits_info: "openness: 0.5"
+    previous_tweets: []
+    activity_level: []
+    is_robot: false
+
+simulation:
+  steps: 2
+  activation: all
+  probability: 0.1
+  agent_limit: 200
+  semaphore: 80
+  update_attitude: true
+
+resume:
+  start_step: null
+  validate_db: true
+  require_user_agent_id_equal: true
+  require_contiguous_agent_ids: true
+  initialize_agent_state: true
+
+
+
+
+
+
+smoke_test:
+  build_platform: true
+  run_steps: false
+  steps: 0
+  agent_limit: 2
