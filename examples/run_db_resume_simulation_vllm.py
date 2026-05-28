@@ -6,7 +6,7 @@ never writes to the input DB; it copies the input DB to the configured output
 DB before smoke or run execution.
 """
 
-#  python run_db_resume_simulation.py --config /home/yy/exp1/oasis_lite/examples/configs/db_resume_template.yaml
+#  python run_db_resume_simulation_vllm.py --config /home/yy/exp1/oasis_lite/examples/configs/db_resume_vllm.yaml
 
 from __future__ import annotations
 
@@ -477,7 +477,10 @@ def persist_agent_states(db_path: Path, env: Any, updated_at: int,
 
 
 def apply_model_env(model_config: dict[str, Any]) -> str | None:
-    platform_name = str(model_config.get("platform", "qwen")).lower()
+    platform_name = str(model_config.get("platform", "vllm")).lower()
+    if platform_name == "vllm":
+        return None
+
     defaults = {
         "qwen": ("QWEN_API_KEY", "DASHSCOPE_API_KEY"),
         "openai": ("OPENAI_API_KEY", None),
@@ -503,16 +506,61 @@ def apply_model_env(model_config: dict[str, Any]) -> str | None:
            if fallback_api_key_env else "."))
 
 
+def configured_model_api_key(model_config: dict[str, Any]) -> str | None:
+    api_key = model_config.get("api_key")
+    if api_key not in (None, ""):
+        return str(api_key)
+
+    api_key_env = model_config.get("api_key_env")
+    if api_key_env:
+        return os.environ.get(str(api_key_env))
+    return None
+
+
+def model_factory_runtime_kwargs(model_config: dict[str, Any]) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    for key in ("timeout", "max_retries"):
+        if key in model_config and model_config[key] is not None:
+            kwargs[key] = model_config[key]
+    return kwargs
+
+
 def build_model(model_config: dict[str, Any]):
     apply_model_env(model_config)
 
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType, ModelType
 
-    platform_name = str(model_config.get("platform", "qwen")).lower()
+    platform_name = str(model_config.get("platform", "vllm")).lower()
     type_name = model_config.get("type")
-    url = model_config.get("url")
+    url = model_config.get("url") or model_config.get("base_url")
     extra_config = model_config.get("config") or {}
+    if not isinstance(extra_config, dict):
+        raise ValueError("model.config must be a mapping.")
+
+    if platform_name == "vllm":
+        model_type = type_name or os.getenv("MODEL_NAME")
+        if not model_type:
+            raise ValueError(
+                "model.type is required for model.platform: vllm. Use the "
+                "same name as vLLM --served-model-name, or the model path if "
+                "you did not set --served-model-name.")
+        base_url = (
+            url
+            or os.getenv("VLLM_BASE_URL")
+            or os.getenv("OPENAI_BASE_URL")
+            or "http://127.0.0.1:8000/v1"
+        )
+        os.environ["IS_VLLM"] = "true"
+        os.environ["MODEL_NAME"] = str(model_type)
+        return ModelFactory.create(
+            model_platform=ModelPlatformType.OPENAI_COMPATIBLE_MODEL,
+            model_type=model_type,
+            api_key=configured_model_api_key(model_config) or "EMPTY",
+            url=base_url,
+            model_config_dict=extra_config,
+            **model_factory_runtime_kwargs(model_config),
+        )
 
     platform_map = {
         "qwen": ModelPlatformType.QWEN,

@@ -1,5 +1,5 @@
 
-#  python run_db_resume_simulation.py --config /home/yy/exp1/oasis_lite/examples/configs/db_resume_template.yaml
+#  python run_db_resume_simulation.py --config /home/yy/exp1/oasis_lite/examples/configs/db_resume_vllm.yaml
 
 task:
   name: db_resume_template
@@ -9,8 +9,9 @@ task:
 paths:
   input_db: inputs/twitter_simulation1000_TikTok.db
   output_dir: outputs/db_resume/db_resume_template
-  output_db: outputs/db_resume/db_resume_template/two_step_run.db
+  output_db: outputs/db_resume/db_resume_template/two_step_run_vllm.db
   overwrite_output: true
+  
 
 execution:
   mode: run
@@ -19,12 +20,13 @@ execution:
   stop_on_validation_error: true
 
 model:
-  platform: qwen
-  type: qwen-plus
-  url: null
-  api_key_env: QWEN_API_KEY
-  fallback_api_key_env: DASHSCOPE_API_KEY
-  config: {}
+  platform: vllm
+  type: your-served-model-name
+  url: http://127.0.0.1:8000/v1
+  api_key: EMPTY
+  config:
+    temperature: 0.7
+    top_p: 0.9
 
 platform:
   type: twitter

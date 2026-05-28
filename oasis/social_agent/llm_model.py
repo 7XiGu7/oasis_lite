@@ -61,8 +61,8 @@ class LLMSkippableError(Exception):
     """Raised for data-specific LLM errors that should skip the current item."""
 from dotenv import load_dotenv
 
-# 加载 .env 文件中的环境变量
-load_dotenv(override=True)
+# Load .env defaults without overriding runtime log paths configured by callers.
+load_dotenv(override=False)
 
 _LOG_DIR = os.getenv("OASIS_LOG_DIR", "outputs/logs")
 os.makedirs(_LOG_DIR, exist_ok=True)

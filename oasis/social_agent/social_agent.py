@@ -43,6 +43,15 @@ class SocialAgent(ChatAgent):
     r"""Social Agent."""
 
     _TOOL_ACTION_NAMES = frozenset(SocialAction._action_function_names)
+    _TOOL_ACTION_ALIASES = {
+        "comment": "create_comment",
+        "comment_post": "create_comment",
+        "comment_on_post": "create_comment",
+        "reply": "create_comment",
+        "reply_post": "create_comment",
+        "reply_to_post": "create_comment",
+        "post_comment": "create_comment",
+    }
 
     @staticmethod
     def _tool_name(tool: dict) -> str:
@@ -55,6 +64,8 @@ class SocialAgent(ChatAgent):
         action_name = action_name.strip()
         if action_name in cls._TOOL_ACTION_NAMES:
             return action_name
+        if action_name in cls._TOOL_ACTION_ALIASES:
+            return cls._TOOL_ACTION_ALIASES[action_name]
 
         # Some local tool parsers may leak channel/control tokens into the
         # function name, e.g. "follow<|channel|>commentary".
@@ -62,6 +73,8 @@ class SocialAgent(ChatAgent):
             candidate = action_name.split("<|", 1)[0].strip()
             if candidate in cls._TOOL_ACTION_NAMES:
                 return candidate
+            if candidate in cls._TOOL_ACTION_ALIASES:
+                return cls._TOOL_ACTION_ALIASES[candidate]
 
         return action_name
 
@@ -132,6 +145,53 @@ class SocialAgent(ChatAgent):
             f"Agent {self.social_agent_id} action: "
             f"{self._action_display_name(action_name)}; "
             f"params: {self._summarize_action_args(args, kwargs)}")
+
+    @staticmethod
+    def _tool_call_result(tool_call: Any) -> Any:
+        if isinstance(tool_call, dict):
+            return tool_call.get("result")
+        return getattr(tool_call, "result", None)
+
+    @classmethod
+    def _tool_call_failed(cls, tool_call: Any) -> bool:
+        result = cls._tool_call_result(tool_call)
+        if isinstance(result, dict):
+            return result.get("success") is False
+        if isinstance(result, str):
+            text = result.lower()
+            return (
+                text.startswith("tool execution failed:")
+                or "not found in registered tools" in text
+            )
+        return False
+
+    @staticmethod
+    def _response_tool_calls(response: Any) -> list[Any]:
+        response_info = getattr(response, "info", {}) or {}
+        if isinstance(response_info, dict):
+            return response_info.get("tool_calls") or []
+        return []
+
+    def _tool_retry_prompt(self, *, reason: str) -> str:
+        available_actions = ", ".join(
+            tool.get_function_name()
+            for tool in (self.action_tools or [])
+            if hasattr(tool, "get_function_name")
+        )
+        if is_zh_locale(self.locale):
+            return (
+                "上一次工具调用没有成功执行，请重新选择并调用一个已注册工具。"
+                f"只能使用这些工具名：{available_actions}。"
+                "如果想评论帖子，必须使用 create_comment。"
+                f"失败原因：{reason}"
+            )
+        return (
+            "The previous tool call did not execute successfully. "
+            "Choose and call one registered tool again. "
+            f"Registered tool names: {available_actions}. "
+            "To comment on a post, use create_comment exactly. "
+            f"Failure reason: {reason}"
+        )
 
     @staticmethod
     def _tool_call_args(tool_call: Any) -> Any:
@@ -273,27 +333,75 @@ class SocialAgent(ChatAgent):
         user_msg = BaseMessage.make_user_message(
             role_name="User",
             content=user_content)
-        try:
-            response = await self.astep(user_msg)
-            response_info = getattr(response, "info", {}) or {}
-            tool_calls = (
-                response_info.get("tool_calls")
-                if isinstance(response_info, dict)
-                else None
-            ) or []
-            if not tool_calls:
-                return {
-                    "success": False,
-                    "error": "LLM response did not include a tool call.",
-                }
-            for tool_call in tool_calls:
-                action_name = self._tool_call_name(tool_call)
-                args = self._tool_call_args(tool_call)
-                self._log_action_summary(action_name, args=args)
+        for attempt in range(2):
+            try:
+                response = await self.astep(user_msg)
+                tool_calls = self._response_tool_calls(response)
+                if not tool_calls:
+                    reason = "LLM response did not include a tool call."
+                    if attempt == 0:
+                        agent_log.warning(
+                            f"Agent {self.social_agent_id} retrying action: {reason}"
+                        )
+                        user_msg = BaseMessage.make_user_message(
+                            role_name="User",
+                            content=self._tool_retry_prompt(reason=reason),
+                        )
+                        continue
+                    return {"success": False, "error": reason}
+
+                failed_calls = [
+                    tool_call for tool_call in tool_calls
+                    if self._tool_call_failed(tool_call)
+                ]
+                if failed_calls and len(failed_calls) == len(tool_calls) and attempt == 0:
+                    failed_names = [
+                        self._tool_call_name(tool_call)
+                        for tool_call in failed_calls
+                    ]
+                    reason = (
+                        "Tool call failed for "
+                        f"{', '.join(failed_names) or 'unknown tool'}."
+                    )
+                    agent_log.warning(
+                        f"Agent {self.social_agent_id} retrying action: {reason}"
+                    )
+                    user_msg = BaseMessage.make_user_message(
+                        role_name="User",
+                        content=self._tool_retry_prompt(reason=reason),
+                    )
+                    continue
+                if failed_calls:
+                    failed_names = [
+                        self._tool_call_name(tool_call)
+                        for tool_call in failed_calls
+                    ]
+                    agent_log.warning(
+                        f"Agent {self.social_agent_id} had failed tool calls "
+                        f"after at least one tool call was returned: "
+                        f"{', '.join(failed_names) or 'unknown tool'}."
+                    )
+
+                for tool_call in tool_calls:
+                    action_name = self._tool_call_name(tool_call)
+                    args = self._tool_call_args(tool_call)
+                    self._log_action_summary(action_name, args=args)
                 return response
-        except Exception as e:
-            agent_log.error(f"Agent {self.social_agent_id} error: {e}")
-            return e
+            except Exception as e:
+                if attempt == 0:
+                    message = str(e)
+                    if "not found in registered tools" in message:
+                        agent_log.warning(
+                            f"Agent {self.social_agent_id} retrying action "
+                            f"after tool lookup failure: {message}"
+                        )
+                        user_msg = BaseMessage.make_user_message(
+                            role_name="User",
+                            content=self._tool_retry_prompt(reason=message),
+                        )
+                        continue
+                agent_log.error(f"Agent {self.social_agent_id} error: {e}")
+                return e
 
 
     async def perform_test(self):
